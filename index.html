@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>when. V3.1 microphone</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="theme-color" content="#00C853">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="when.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif}
+body{background:#0a0a0a;color:white;padding:16px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.logo{font-size:32px;font-weight:800}.dot{color:#00C853}
+.badge{background:#00C853;color:black;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700}
+.stop{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:14px 16px;display:flex;gap:12px;align-items:center;margin-bottom:10px}
+.stop input{background:transparent;border:none;color:white;font-size:16px;width:100%;outline:none}
+.mic-btn{background:#2a2a2a;border:none;color:white;width:34px;height:34px;border-radius:50%;font-size:15px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.mic-btn.listening{background:#00C853;animation:pulse 1s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(0,200,83,.6)}70%{box-shadow:0 0 0 10px rgba(0,200,83,0)}100%{box-shadow:0 0 0 0 rgba(0,200,83,0)}}
+.num{background:#2a2a2a;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.add{border:1px dashed #333;border-radius:16px;padding:14px;text-align:center;color:#888;cursor:pointer;margin-bottom:16px}
+.btn{background:#00C853;color:black;border:none;border-radius:16px;padding:18px;font-size:18px;font-weight:800;cursor:pointer;width:100%;display:flex;justify-content:center;gap:8px}
+.results{margin-top:16px;display:none;flex-direction:column;gap:10px}
+.card{background:#1a1a1a;border-radius:16px;padding:16px;border:1px solid #2a2a2a;cursor:pointer;transition:transform .1s,border-color .15s}
+.card:active{transform:scale(0.97)}
+.card:hover{border-color:#00C853}
+.card.best{border-color:#00C853;background:#0f1f14}
+.card-top{display:flex;justify-content:space-between;margin-bottom:6px}
+.time{font-size:18px;font-weight:700}
+.details{color:#888;font-size:14px;line-height:1.5}
+.pill{font-size:11px;padding:4px 8px;border-radius:10px;font-weight:700;background:#00C853;color:black}
+.nav-hint{color:#00C853;font-size:12px;font-weight:700;margin-top:8px;display:flex;align-items:center;gap:4px}
+.nav-overlay{position:fixed;inset:0;background:#0a0a0a;z-index:999;display:none;flex-direction:column}
+.nav-overlay.active{display:flex}
+.nav-topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 16px}
+.nav-close{background:#1a1a1a;border:none;color:white;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer}
+.instruction-banner{display:flex;align-items:center;gap:14px;background:#00C853;color:black;padding:16px}
+.instr-icon{font-size:34px;flex-shrink:0}
+.instr-dist{font-size:24px;font-weight:800;line-height:1.1}
+.instr-msg{font-size:14px;font-weight:600;margin-top:2px}
+#map{flex:1;width:100%}
+.nav-info{padding:16px;display:flex;justify-content:space-between;align-items:center;background:#0a0a0a;border-top:1px solid #2a2a2a}
+.nav-eta{font-size:26px;font-weight:800;color:#00C853}
+.nav-dist{color:#888;font-size:14px;margin-top:2px}
+.watch-btn{margin-top:4px;width:100%;background:#1a1a1a;border:1px solid #2a2a2a;color:white;padding:16px;border-radius:16px;font-weight:700;font-size:14px;cursor:pointer}
+.watch-btn.watching{background:#00C853;color:black;border-color:#00C853}
+</style>
+</head>
+<body>
+
+<div class="header"><div class="logo">when<span class="dot">.</span></div><div class="badge">V3.1 micro</div></div>
+
+<div id="stops">
+  <div class="stop"><div class="num">📍</div><input id="depart" value="Localisation GPS..." placeholder="Départ GPS"><button class="mic-btn" onclick="startVoiceInput(this)">🎤</button></div>
+  <div class="stop"><div class="num">1</div><input placeholder="Lieu à définir"><button class="mic-btn" onclick="startVoiceInput(this)">🎤</button></div>
+</div>
+<div class="add" onclick="addStop()">+ Ajouter un trajet</div>
+<button class="btn" onclick="calculate()">Optimise mon parcours →</button>
+<div class="results" id="results"></div>
+
+<div class="nav-overlay" id="navOverlay">
+  <div class="nav-topbar">
+    <button class="nav-close" onclick="closeNav()">✕</button>
+    <div class="badge">🧭 Navigation</div>
+  </div>
+  <div class="instruction-banner" id="instructionBanner">
+    <div class="instr-icon" id="instrIcon">🧭</div>
+    <div>
+      <div class="instr-dist" id="instrDist">--</div>
+      <div class="instr-msg" id="instrMsg">Calcul de l'itinéraire...</div>
+    </div>
+  </div>
+  <div id="map"></div>
+  <div class="nav-info">
+    <div><div class="nav-eta" id="navEta">--</div><div class="nav-dist" id="navDist">--</div></div>
+  </div>
+</div>
+
+<script>
+const API_KEY = "Hwsj0SD7WOVMrzK4oyOYpLdldS7qiGU4";
+let myPos = null;
+let currentStart = null;
+let currentDest = null;
+let currentDestLabel = "";
+let currentStops = [];
+let currentRouteCoords = null;
+let trafficWatchInterval = null;
+
+// Active/désactive la surveillance : vérifie le trafic toutes les 5 min et notifie quand c'est fluide
+function toggleTrafficWatch(btn){
+  if(trafficWatchInterval){
+    clearInterval(trafficWatchInterval);
+    trafficWatchInterval = null;
+    btn.textContent = "🔔 Me prévenir quand c'est fluide";
+    btn.classList.remove('watching');
+    return;
+  }
+  if(!currentRouteCoords){ alert("Calcule d'abord un parcours"); return; }
+  if('Notification' in window && Notification.permission === 'default'){
+    Notification.requestPermission();
+  }
+  btn.textContent = '🔔 Surveillance active (vérif. toutes les 5 min) — appuie pour arrêter';
+  btn.classList.add('watching');
+  checkTrafficFluidity();
+  trafficWatchInterval = setInterval(checkTrafficFluidity, 5*60*1000);
+}
+
+// Interroge TomTom pour voir si le trafic est redevenu fluide sur le trajet calculé
+async function checkTrafficFluidity(){
+  try{
+    const r = await routeMulti(currentRouteCoords, null);
+    const delay = r.summary.trafficDelayInSeconds || 0;
+    const noTraffic = r.summary.noTrafficTravelTimeInSeconds || r.summary.travelTimeInSeconds;
+    const ratio = noTraffic > 0 ? delay / noTraffic : 0;
+    const isFluide = delay < 180 || ratio < 0.1;
+    if(isFluide){
+      const msg = "C'est fluide, tu peux partir maintenant ! (retard trafic : " + Math.round(delay/60) + " min)";
+      if('Notification' in window && Notification.permission === 'granted'){
+        new Notification('when. 🟢 Circulation fluide', {body: msg});
+      }
+      speak(msg);
+    }
+  }catch(e){ console.error(e); }
+}
+
+// Détecte iOS (gardé au cas où utile ailleurs)
+function isIOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+}
+
+let navMap = null;
+let watchId = null;
+let posMarker = null;
+let navInstructions = [];
+let navInstrIndex = 0;
+
+// Distance en mètres entre 2 points GPS (formule de Haversine)
+function distMeters(lat1, lon1, lat2, lon2){
+  const R = 6371000;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Choisit une icône selon le type de manœuvre renvoyé par TomTom
+function maneuverIcon(maneuver){
+  if(!maneuver) return '🧭';
+  if(maneuver.includes('LEFT')) return '⬅️';
+  if(maneuver.includes('RIGHT')) return '➡️';
+  if(maneuver.includes('UTURN')) return '↩️';
+  if(maneuver.includes('ROUNDABOUT')) return '🔄';
+  if(maneuver.includes('ARRIVE')) return '🏁';
+  if(maneuver.includes('DEPART')) return '📍';
+  return '⬆️';
+}
+
+// Lit l'instruction à voix haute
+function speak(text){
+  if(!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'fr-FR';
+  window.speechSynthesis.speak(u);
+}
+
+// Met à jour le bandeau du haut avec l'instruction en cours et la distance restante
+function updateInstructionBanner(distance){
+  const instr = navInstructions[navInstrIndex];
+  if(!instr) return;
+  document.getElementById('instrIcon').textContent = maneuverIcon(instr.maneuver);
+  document.getElementById('instrMsg').textContent = instr.message || 'Continuez tout droit';
+  document.getElementById('instrDist').textContent = distance >= 1000 ? (distance/1000).toFixed(1)+' km' : Math.round(distance)+' m';
+}
+
+// Compare la position live au point de la prochaine manœuvre, avance et annonce quand on l'a passée
+function updateGuidance(lat, lon){
+  if(!navInstructions.length) return;
+  const instr = navInstructions[navInstrIndex];
+  if(!instr || !instr.point) return;
+  const d = distMeters(lat, lon, instr.point.latitude, instr.point.longitude);
+
+  if(d < 35 && navInstrIndex < navInstructions.length - 1){
+    navInstrIndex++;
+    const next = navInstructions[navInstrIndex];
+    if(next?.message) speak(next.message);
+    updateInstructionBanner(distMeters(lat, lon, next.point.latitude, next.point.longitude));
+  } else {
+    updateInstructionBanner(d);
+  }
+}
+
+// Charge le SDK carte TomTom (CSS + JS) directement en JS, sans dépendre du <head>
+let ttLoadingPromise = null;
+function loadTomTomSDK(){
+  if(typeof tt !== 'undefined') return Promise.resolve();
+  if(ttLoadingPromise) return ttLoadingPromise;
+  ttLoadingPromise = new Promise((resolve, reject)=>{
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.25.0/maps/maps.css';
+    document.head.appendChild(css);
+
+    const script = document.createElement('script');
+    script.src = 'https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.25.0/maps/maps-web.min.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Impossible de charger le SDK carte TomTom"));
+    document.head.appendChild(script);
+  });
+  return ttLoadingPromise;
+}
+
+function initMapIfNeeded(){
+  if(navMap) return navMap;
+  tt.setProductInfo('when-app', '1.0');
+  navMap = tt.map({
+    key: API_KEY,
+    container: 'map',
+    center: [2.35, 48.85],
+    zoom: 12
+  });
+  return navMap;
+}
+
+// Affiche l'écran de navigation avec la carte + l'itinéraire tracé + la position live
+async function openNav(routeObj){
+  if(!routeObj){ alert("Calcule d'abord un parcours"); return; }
+  try{
+    await loadTomTomSDK();
+  }catch(e){
+    alert("La carte TomTom n'a pas pu se charger (réseau ou bloqueur de pub). " + e.message);
+    return;
+  }
+  document.getElementById('navOverlay').classList.add('active');
+
+  document.getElementById('navEta').textContent = Math.round(routeObj.summary.travelTimeInSeconds/60)+' min';
+  document.getElementById('navDist').textContent = (routeObj.summary.lengthInMeters/1000).toFixed(1)+' km';
+
+  // Prépare le guidage : liste des instructions + annonce de la première
+  navInstructions = routeObj.guidance?.instructions || [];
+  navInstrIndex = 0;
+  if(navInstructions.length){
+    const first = navInstructions[0];
+    document.getElementById('instrIcon').textContent = maneuverIcon(first.maneuver);
+    document.getElementById('instrMsg').textContent = first.message || 'Démarrage du guidage';
+    document.getElementById('instrDist').textContent = '--';
+    speak(first.message || "C'est parti, je vous guide.");
+  } else {
+    document.getElementById('instrMsg').textContent = "Pas d'instructions détaillées disponibles pour ce trajet";
+  }
+
+  // Attendre que le navigateur ait rendu l'écran (sinon la carte se calcule une taille de 0x0)
+  requestAnimationFrame(()=>{
+    const map = initMapIfNeeded();
+    map.resize();
+
+    const drawRoute = ()=>{
+      map.resize();
+      const points = routeObj.legs.flatMap(l=>l.points).map(p=>[p.longitude, p.latitude]);
+      const geojson = {type:'Feature', geometry:{type:'LineString', coordinates:points}};
+
+      if(map.getSource('route-source')){
+        map.getSource('route-source').setData(geojson);
+      } else {
+        map.addLayer({
+          id:'route-line', type:'line',
+          source:{type:'geojson', data:geojson, id:'route-source'},
+          layout:{'line-cap':'round','line-join':'round'},
+          paint:{'line-color':'#00C853','line-width':6}
+        });
+      }
+
+      let bounds = new tt.LngLatBounds(points[0], points[0]);
+      points.forEach(p=>bounds.extend(p));
+      map.fitBounds(bounds, {padding:60});
+    };
+
+    if(map.isStyleLoaded()) drawRoute(); else map.once('load', drawRoute);
+
+    startTracking(map);
+  });
+}
+
+// Suit la position réelle de l'utilisateur et la fait apparaître sur la carte
+function startTracking(map){
+  if(!navigator.geolocation) return;
+  if(watchId) navigator.geolocation.clearWatch(watchId);
+  watchId = navigator.geolocation.watchPosition(pos=>{
+    const {latitude:lat, longitude:lon} = pos.coords;
+    if(!posMarker){
+      const el = document.createElement('div');
+      el.style.cssText = 'width:18px;height:18px;border-radius:50%;background:#00C853;border:3px solid white;box-shadow:0 0 10px rgba(0,200,83,.9)';
+      posMarker = new tt.Marker({element:el}).setLngLat([lon, lat]).addTo(map);
+    } else {
+      posMarker.setLngLat([lon, lat]);
+    }
+    map.panTo([lon, lat]);
+    updateGuidance(lat, lon);
+  }, ()=>{}, {enableHighAccuracy:true});
+}
+
+function closeNav(){
+  document.getElementById('navOverlay').classList.remove('active');
+  if(watchId){ navigator.geolocation.clearWatch(watchId); watchId = null; }
+  if('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+function addStop(){
+  const count = document.querySelectorAll('#stops .stop').length;
+  const d = document.createElement('div'); d.className='stop';
+  d.innerHTML = `<div class="num">${count}</div>🛒<input placeholder="Lieu à définir"><button class="mic-btn" onclick="startVoiceInput(this)">🎤</button>`;
+  document.getElementById('stops').appendChild(d);
+}
+
+// Reconnaissance vocale : dicte un lieu directement dans le champ
+function startVoiceInput(btn){
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){
+    alert("La reconnaissance vocale n'est pas supportée par ce navigateur. Essaie avec Chrome.");
+    return;
+  }
+  const input = btn.parentElement.querySelector('input');
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'fr-FR';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  btn.classList.add('listening');
+  btn.textContent = '🔴';
+
+  recognition.onresult = (e)=>{
+    input.value = e.results[0][0].transcript;
+  };
+  recognition.onerror = (e)=>{
+    if(e.error !== 'aborted') alert("Erreur de reconnaissance vocale : " + e.error);
+  };
+  recognition.onend = ()=>{
+    btn.classList.remove('listening');
+    btn.textContent = '🎤';
+  };
+
+  recognition.start();
+}
+
+window.addEventListener('load', ()=>{
+  if(!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    myPos = {lat:pos.coords.latitude, lon:pos.coords.longitude};
+    try{
+      const r = await fetch(`https://api.tomtom.com/search/2/reverseGeocode/${myPos.lat},${myPos.lon}.json?key=${API_KEY}`);
+      const j = await r.json();
+      document.getElementById('depart').value = j.addresses[0]?.address.freeformAddress || "Ma position GPS";
+    }catch(e){ document.getElementById('depart').value = "Ma position GPS"; }
+  }, ()=>{
+    document.getElementById('depart').value = "";
+    document.getElementById('depart').placeholder = "Lieu à définir";
+  });
+});
+
+async function geocode(q){
+  const r = await fetch(`https://api.tomtom.com/search/2/search/${encodeURIComponent(q)}.json?key=${API_KEY}&limit=1&countrySet=FR`);
+  const j = await r.json(); return j.results[0]?.position;
+}
+
+// Géocode un lieu ET récupère ses horaires d'ouverture (base TomTom) si c'est un commerce reconnu
+async function geocodeWithHours(q){
+  const r = await fetch(`https://api.tomtom.com/search/2/search/${encodeURIComponent(q)}.json?key=${API_KEY}&limit=1&countrySet=FR&openingHours=nextSevenDays`);
+  const j = await r.json();
+  const result = j.results[0];
+  if(!result) return null;
+  return {pos: result.position, openingHours: result.poi?.openingHours || null};
+}
+
+// Construit une Date JS à partir d'un objet {date, hour, minute} renvoyé par TomTom
+function ttTimeToDate(t){
+  return new Date(`${t.date}T${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')}:00`);
+}
+
+// Détermine si un commerce est ouvert à une date donnée, et calcule fermeture/réouverture
+function parseOpeningHours(openingHours, atDate){
+  if(!openingHours || !openingHours.timeRanges || !openingHours.timeRanges.length){
+    return {known:false};
+  }
+  const ranges = openingHours.timeRanges.map(r=>({start:ttTimeToDate(r.startTime), end:ttTimeToDate(r.endTime)}));
+  const current = ranges.find(r=>atDate >= r.start && atDate <= r.end);
+  if(current){
+    return {known:true, open:true, closesAt:current.end};
+  }
+  const next = ranges.filter(r=>r.start > atDate).sort((a,b)=>a.start-b.start)[0];
+  return {known:true, open:false, opensAt: next ? next.start : null};
+}
+
+function fmtTime(d){ return d.toLocaleTimeString().slice(0,5); }
+function fmtDuration(ms){
+  const totalMin = Math.round(ms/60000);
+  if(totalMin < 60) return totalMin+' min';
+  return Math.floor(totalMin/60)+'h'+String(totalMin%60).padStart(2,'0');
+}
+
+// Calcule un itinéraire pouvant passer par plusieurs arrêts, dans l'ordre donné (coordsStr = "lat,lon:lat,lon:...")
+async function routeMulti(coordsStr, departAt){
+  let url = `https://api.tomtom.com/routing/1/calculateRoute/${coordsStr}/json?key=${API_KEY}&traffic=true&travelMode=car&instructionsType=text&language=fr-FR`;
+  if(departAt) url += `&departAt=${encodeURIComponent(departAt)}`;
+  const r = await fetch(url); const j = await r.json(); return j.routes[0];
+}
+
+// Génère toutes les combinaisons d'ordre possibles pour une liste d'arrêts
+function permutations(arr){
+  if(arr.length <= 1) return [arr];
+  const result = [];
+  for(let i=0;i<arr.length;i++){
+    const rest = [...arr.slice(0,i), ...arr.slice(i+1)];
+    for(const p of permutations(rest)) result.push([arr[i], ...p]);
+  }
+  return result;
+}
+
+// Teste tous les ordres possibles et garde celui au temps de trajet total le plus court (avec trafic réel)
+async function findBestOrder(startPos, stops){
+  const perms = permutations(stops);
+  let best = null;
+  for(const perm of perms){
+    const coordsStr = [startPos, ...perm.map(s=>s.pos)].map(p=>`${p.lat},${p.lon}`).join(':');
+    const r = await routeMulti(coordsStr, null);
+    const time = r.summary.travelTimeInSeconds;
+    if(!best || time < best.time) best = {order: perm, time};
+  }
+  return best;
+}
+
+async function calculate(){
+  const inputs = [...document.querySelectorAll('#stops input')].slice(1).map(i=>i.value).filter(v=>v.trim()!=="");
+  if(inputs.length < 1){ alert("Ajoute au moins 1 Lieu à définir"); return; }
+  const res = document.getElementById('results');
+  res.style.display='flex';
+  res.innerHTML='<div class="card">⏳ Calcul avec trafic TomTom...</div>';
+  try{
+    let startPos = myPos;
+    if(!startPos){
+      const depVal = document.getElementById('depart').value;
+      if(depVal && depVal!=="Localisation GPS..." && depVal!=="Ma position GPS" && depVal.trim()!=="") {
+        startPos = await geocode(depVal);
+      } else {
+        throw new Error("GPS non dispo, tape ton départ");
+      }
+    }
+    currentStart = startPos;
+
+    // Géocode tous les arrêts saisis + récupère leurs horaires d'ouverture si connus
+    const stops = [];
+    for(const addr of inputs){
+      const g = await geocodeWithHours(addr);
+      if(!g) throw new Error("Adresse introuvable : " + addr);
+      stops.push({label: addr, pos: g.pos, openingHours: g.openingHours});
+    }
+
+    // S'il y a plusieurs arrêts, cherche l'ordre qui minimise le temps de trajet total (avec trafic réel)
+    let orderedStops = stops;
+    let orderHtml = '';
+    if(stops.length > 1){
+      res.innerHTML = `<div class="card">⏳ Recherche du meilleur ordre parmi ${stops.length} arrêts...</div>`;
+      const best = await findBestOrder(startPos, stops);
+      orderedStops = best.order;
+      orderHtml = `
+        <div class="card" style="border-color:#00C853">
+          <div class="card-top"><span class="time">🧭 ORDRE CONSEILLÉ</span></div>
+          <div class="details">${orderedStops.map((s,i)=>(i+1)+'. '+s.label).join(' → ')}</div>
+        </div>
+      `;
+    }
+
+    currentStops = orderedStops;
+    const lastStop = orderedStops[orderedStops.length - 1];
+    currentDest = lastStop.pos;
+    currentDestLabel = lastStop.label;
+
+    const coordsStr = [startPos, ...orderedStops.map(s=>s.pos)].map(p=>`${p.lat},${p.lon}`).join(':');
+    currentRouteCoords = coordsStr;
+
+    const fmt = s=>Math.round(s/60);
+    const rNow = await routeMulti(coordsStr, null);
+    const in30 = new Date(Date.now() + 30*60000);
+    const r30 = await routeMulti(coordsStr, in30.toISOString());
+    const rBest = rNow.summary.travelTimeInSeconds <= r30.summary.travelTimeInSeconds ? rNow : r30;
+    window.__routes = {now:rNow, in30:r30, best:rBest};
+
+    // Calcule, pour chaque arrêt, l'heure d'arrivée (en partant maintenant), et croise avec les horaires d'ouverture
+    let cumulative = 0;
+    const hoursHtml = orderedStops.map((s, i)=>{
+      cumulative += rNow.legs[i].summary.travelTimeInSeconds;
+      const eta = new Date(Date.now() + cumulative*1000);
+      const status = parseOpeningHours(s.openingHours, eta);
+      let line;
+      if(!status.known){
+        line = `ℹ️ Horaires d'ouverture non disponibles pour ce lieu • Arrivée prévue ${fmtTime(eta)}`;
+      } else if(status.open){
+        const remaining = status.closesAt - eta;
+        const deadline = new Date(status.closesAt.getTime() - cumulative*1000);
+        line = remaining > 0
+          ? `✅ Ouvert jusqu'à ${fmtTime(status.closesAt)} • Arrivée ${fmtTime(eta)} → il te restera ${fmtDuration(remaining)} sur place • Pars au plus tard à ${fmtTime(deadline)}`
+          : `⚠️ Ouvert maintenant mais fermera avant ton arrivée (${fmtTime(status.closesAt)}) • Arrivée prévue ${fmtTime(eta)}`;
+      } else {
+        line = `❌ Fermé à l'heure d'arrivée prévue (${fmtTime(eta)})${status.opensAt ? ' • Réouvre le ' + status.opensAt.toLocaleDateString() + ' à ' + fmtTime(status.opensAt) : ''}`;
+      }
+      return `
+        <div class="card">
+          <div class="card-top"><span class="time">🏬 ${s.label}</span></div>
+          <div class="details">${line}</div>
+        </div>
+      `;
+    }).join('');
+
+    res.innerHTML = orderHtml + hoursHtml + `
+      <div class="card best" onclick="openNav(window.__routes.now)">
+        <div class="card-top"><span class="time">🟢 MAINTENANT</span><span class="pill">${fmt(rNow.summary.travelTimeInSeconds)} min</span></div>
+        <div class="details">${(rNow.summary.lengthInMeters/1000).toFixed(1)} km • trafic réel • Arrivée ${new Date(Date.now()+rNow.summary.travelTimeInSeconds*1000).toLocaleTimeString().slice(0,5)}</div>
+        <div class="nav-hint">🧭 Appuie pour lancer la navigation</div>
+      </div>
+      <div class="card" onclick="openNav(window.__routes.in30)">
+        <div class="card-top"><span class="time">🟠 DANS 30 MIN</span><span class="pill">${fmt(r30.summary.travelTimeInSeconds)} min</span></div>
+        <div class="details">Départ à ${in30.toLocaleTimeString().slice(0,5)}</div>
+        <div class="nav-hint">🧭 Appuie pour lancer la navigation</div>
+      </div>
+      <div class="card" style="border-color:#00C853" onclick="openNav(window.__routes.best)">
+        <div class="card-top"><span class="time">⭐ MEILLEUR</span><span class="pill">${fmt(Math.min(rNow.summary.travelTimeInSeconds, r30.summary.travelTimeInSeconds))} min</span></div>
+        <div class="details">${r30.summary.travelTimeInSeconds < rNow.summary.travelTimeInSeconds? 'Attends 30 min tu gagnes '+(fmt(rNow.summary.travelTimeInSeconds - r30.summary.travelTimeInSeconds))+' min' : 'Pars maintenant, c est le mieux'}</div>
+        <div class="nav-hint">🧭 Appuie pour lancer la navigation</div>
+      </div>
+      <button class="watch-btn" id="watchBtn" onclick="toggleTrafficWatch(this)">🔔 Me prévenir quand c'est fluide</button>
+    `;
+  }catch(e){
+    document.getElementById('results').innerHTML = `<div class="card">Erreur: ${e.message}</div>`;
+  }
+}
+
+// Enregistre le service worker (nécessaire pour que Chrome propose "Installer l'application")
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(e => console.error('SW registration failed', e));
+  });
+}
+</script>
+</body>
+</html>
